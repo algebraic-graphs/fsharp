@@ -5,9 +5,5 @@
     <TargetFramework>net461</TargetFramework>
     <DebugType>portable</DebugType>
   </PropertyGroup>
-  <ItemGroup>
-    <Compile Include="Alga.FSharp.fs" />
-    <None Include="Script.fsx" />
-  </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>
