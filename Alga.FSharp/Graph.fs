@@ -1,26 +1,23 @@
-﻿namespace Alga.FSharp
+namespace Alga.FSharp
 
 (*
------------------------------------------------------------------------------
--- |
--- Module     : Algebra.Graph
--- Copyright  : (c) Andrey Mokhov 2016-2017
--- License    : MIT (see the file LICENSE)
--- Maintainer : andrey.mokhov@gmail.com
--- Stability  : experimental
---
--- __Alga__ is a library for algebraic construction and manipulation of graphs
--- in Haskell. See <https://github.com/snowleopard/alga-paper this paper> for the
--- motivation behind the library, the underlying theory, and implementation details.
---
--- This module defines the core data type 'Graph' and associated algorithms.
--- 'Graph' is an instance of type classes defined in modules "Algebra.Graph.Class"
--- and "Algebra.Graph.HigherKinded.Class", which can be used for polymorphic
--- graph construction and manipulation.
---
------------------------------------------------------------------------------
+Module     : Algebra.Graph
+Copyright  : (c) Andrey Mokhov 2016-2018
+License    : MIT (see the file LICENSE)
+Maintainer : andrey.mokhov@gmail.com
+Stability  : experimental
 
-The 'Graph' datatype is a deep embedding of the core graph construction
+__Alga__ is a library for algebraic construction and manipulation of graphs
+in Haskell. See <https://github.com/snowleopard/alga-paper this paper> for the
+motivation behind the library, the underlying theory, and implementation details.
+
+This module defines the core data type 'Graph' and associated algorithms.
+For graphs that are known to be /non-empty/ at compile time, see
+"Algebra.Graph.NonEmpty". 'Graph' is an instance of type classes defined in
+modules "Algebra.Graph.Class" and "Algebra.Graph.HigherKinded.Class", which
+can be used for polymorphic graph construction and manipulation.
+
+The 'Graph' data type is a deep embedding of the core graph construction
 primitives 'empty', 'vertex', 'overlay' and 'connect'. We define a 'Num'
 instance as a convenient notation for working with graphs:
 
@@ -69,8 +66,8 @@ The following useful theorems can be proved from the above set of axioms.
 When specifying the time and memory complexity of graph algorithms, /n/ will
 denote the number of vertices in the graph, /m/ will denote the number of
 edges in the graph, and /s/ will denote the /size/ of the corresponding
-'Graph' expression. For example, if g is a 'Graph' then /n/, /m/ and /s/ can be
-computed as follows:
+'Graph' expression. For example, if @g@ is a 'Graph' then /n/, /m/ and /s/ can
+be computed as follows:
 
 @n == 'vertexCount' g
 m == 'edgeCount' g
@@ -101,7 +98,12 @@ type 'a Graph =
 | Vertex of 'a
 | Overlay of 'a Graph * 'a Graph
 | Connect of 'a Graph * 'a Graph
+with
+    static member Zero : 'a Graph = Empty
+    static member (+) (x : 'a Graph, y : 'a Graph) = Overlay (x, y)
+    static member (*) (x : 'a Graph, y : 'a Graph) = Connect (x, y)
 
+[<RequireQualifiedAccess>]
 module Graph =
 
     /// Construct the /empty graph/. An alias for the constructor 'Empty'.
@@ -114,7 +116,8 @@ module Graph =
     /// 'edgeCount'   empty == 0
     /// 'size'        empty == 1
     /// @
-    let empty = Empty
+    let empty : 'a Graph =
+        Empty
 
     /// Construct the graph comprising /a single isolated vertex/. An alias for the
     /// constructor 'Vertex'.
@@ -123,27 +126,15 @@ module Graph =
     /// @
     /// 'isEmpty'     (vertex x) == False
     /// 'hasVertex' x (vertex x) == True
-    /// 'hasVertex' 1 (vertex 2) == False
     /// 'vertexCount' (vertex x) == 1
     /// 'edgeCount'   (vertex x) == 0
     /// 'size'        (vertex x) == 1
     /// @
-    let vertex v = Vertex v
+    let vertex (a : 'a) : 'a Graph =
+        Vertex a
 
-    /// Construct the graph comprising /a single edge/.
-    /// Complexity: /O(1)/ time, memory and size.
-    ///
-    /// @
-    /// edge x y               == 'connect' ('vertex' x) ('vertex' y)
-    /// 'hasEdge' x y (edge x y) == True
-    /// 'edgeCount'   (edge x y) == 1
-    /// 'vertexCount' (edge 1 1) == 1
-    /// 'vertexCount' (edge 1 2) == 2
-    /// @
-    let edge v1 v2 = Connect (Vertex v1, Vertex v2)
-
-    /// /Overlay/ two graphs. An alias for the constructor 'Overlay'. This is an
-    /// idempotent, commutative and associative operation with the identity 'empty'.
+    /// /Overlay/ two graphs. An alias for the constructor 'Overlay'. This is a
+    /// commutative, associative and idempotent operation with the identity 'empty'.
     /// Complexity: /O(1)/ time and memory, /O(s1 + s2)/ size.
     ///
     /// @
@@ -157,11 +148,12 @@ module Graph =
     /// 'vertexCount' (overlay 1 2) == 2
     /// 'edgeCount'   (overlay 1 2) == 0
     /// @
-    let overlay g1 g2 = Overlay (g1, g2)
+    let overlay (x : 'a Graph) (y : 'a Graph) : 'a Graph =
+        Overlay (x, y)
 
     /// /Connect/ two graphs. An alias for the constructor 'Connect'. This is an
-    /// associative operation with the identity 'empty', which distributes over the
-    /// overlay and obeys the decomposition axiom.
+    /// associative operation with the identity 'empty', which distributes over
+    /// 'overlay' and obeys the decomposition axiom.
     /// Complexity: /O(1)/ time and memory, /O(s1 + s2)/ size. Note that the number
     /// of edges in the resulting graph is quadratic with respect to the number of
     /// vertices of the arguments: /m = O(m1 + m2 + n1 * n2)/.
@@ -179,7 +171,39 @@ module Graph =
     /// 'vertexCount' (connect 1 2) == 2
     /// 'edgeCount'   (connect 1 2) == 1
     /// @
-    let connect g1 g2 = Connect (g1, g2)
+    let connect (x : 'a Graph) (y : 'a Graph) : 'a Graph =
+        Connect (x, y)
+
+    /// Construct the graph comprising /a single edge/.
+    /// Complexity: /O(1)/ time, memory and size.
+    ///
+    /// @
+    /// edge x y               == 'connect' ('vertex' x) ('vertex' y)
+    /// 'hasEdge' x y (edge x y) == True
+    /// 'edgeCount'   (edge x y) == 1
+    /// 'vertexCount' (edge 1 1) == 1
+    /// 'vertexCount' (edge 1 2) == 2
+    /// @
+    let edge (x : 'a) (y : 'a) : 'a Graph =
+        connect (vertex x) (vertex y)
+
+    /// Auxiliary function, similar to 'mconcat'.
+    let concatg (f : 'a Graph -> 'a Graph -> 'a Graph) (gs : 'a Graph seq) : 'a Graph =
+        gs |> Seq.fold f empty
+
+    /// Overlay a given list of graphs.
+    /// Complexity: /O(L)/ time and memory, and /O(S)/ size, where /L/ is the length
+    /// of the given list, and /S/ is the sum of sizes of the graphs in the list.
+    ///
+    /// @
+    /// overlays []        == 'empty'
+    /// overlays [x]       == x
+    /// overlays [x,y]     == 'overlay' x y
+    /// overlays           == 'foldr' 'overlay' 'empty'
+    /// 'isEmpty' . overlays == 'all' 'isEmpty'
+    /// @
+    let overlays (gs : 'a Graph seq) : 'a Graph =
+        gs |> concatg overlay
 
     /// Construct the graph comprising a given list of isolated vertices.
     /// Complexity: /O(L)/ time, memory and size, where /L/ is the length of the
@@ -192,7 +216,8 @@ module Graph =
     /// 'vertexCount' . vertices == 'length' . 'Data.List.nub'
     /// 'vertexSet'   . vertices == Set.'Set.fromList'
     /// @
-    let vertices vs = Seq.fold (fun g -> Vertex >> overlay g) empty vs
+    let vertices (vs : 'a seq) : 'a Graph =
+        vs |> Seq.map vertex |> overlays
 
     /// Construct the graph from a list of edges.
     /// Complexity: /O(L)/ time, memory and size, where /L/ is the length of the
@@ -203,19 +228,8 @@ module Graph =
     /// edges [(x,y)]     == 'edge' x y
     /// 'edgeCount' . edges == 'length' . 'Data.List.nub'
     /// @
-    let edges es = Seq.fold (fun g (v1, v2) -> overlay g (edge v1 v2)) empty es
-
-    /// Overlay a given list of graphs.
-    /// Complexity: /O(L)/ time and memory, and /O(S)/ size, where /L/ is the length
-    /// of the given list, and /S/ is the sum of sizes of the graphs in the list.
-    ///
-    /// @
-    /// overlays []        == 'empty'
-    /// overlays [x]       == x
-    /// overlays [x,y]     == 'overlay' x y
-    /// 'isEmpty' . overlays == 'all' 'isEmpty'
-    /// @
-    let overlays gs = Seq.fold overlay gs
+    let edges (es : ('a * 'a) seq) : 'a Graph =
+        es |> Seq.map ((<||) edge) |> overlays
 
     /// Connect a given list of graphs.
     /// Complexity: /O(L)/ time and memory, and /O(S)/ size, where /L/ is the length
@@ -225,22 +239,11 @@ module Graph =
     /// connects []        == 'empty'
     /// connects [x]       == x
     /// connects [x,y]     == 'connect' x y
+    /// connects           == 'foldr' 'connect' 'empty'
     /// 'isEmpty' . connects == 'all' 'isEmpty'
     /// @
-    let connects gs = Seq.fold connect gs
-
-    /// Construct the graph from given lists of vertices /V/ and edges /E/.
-    /// The resulting graph contains the vertices /V/ as well as all the vertices
-    /// referred to by the edges /E/.
-    /// Complexity: /O(|V| + |E|)/ time, memory and size.
-    ///
-    /// @
-    /// graph []  []      == 'empty'
-    /// graph [x] []      == 'vertex' x
-    /// graph []  [(x,y)] == 'edge' x y
-    /// graph vs  es      == 'overlay' ('vertices' vs) ('edges' es)
-    /// @
-    let graph vs es = overlay (vertices vs) (edges es)
+    let connects (gs : 'a Graph seq) : 'a Graph =
+        gs |> concatg connect
 
     /// Generalised 'Graph' folding: recursively collapse a 'Graph' by applying
     /// the provided functions to the leaves and internal nodes of the expression.
@@ -256,7 +259,7 @@ module Graph =
     /// foldg 1     (const 1)     (+)     (+)            == 'size'
     /// foldg True  (const False) (&&)    (&&)           == 'isEmpty'
     /// @
-    let rec foldg e v o c g =
+    let rec foldg (e : 'b) (v : 'a -> 'b) (o : 'b -> 'b -> 'b) (c : 'b -> 'b -> 'b) (g : 'a Graph) : 'b =
         let go = foldg e v o c
         match g with
         | Empty -> e
@@ -264,39 +267,7 @@ module Graph =
         | Overlay (x, y) -> o (go x) (go y)
         | Connect (x, y) -> c (go x) (go y)
 
-    /// The 'isSubgraphOf' function takes two graphs and returns 'True' if the
-    /// first graph is a /subgraph/ of the second.
-    /// Complexity: /O(s + m * log(m))/ time. Note that the number of edges /m/ of a
-    /// graph can be quadratic with respect to the expression size /s/.
-    ///
-    /// @
-    /// isSubgraphOf 'empty'         x             == True
-    /// isSubgraphOf ('vertex' x)    'empty'         == False
-    /// isSubgraphOf x             ('overlay' x y) == True
-    /// isSubgraphOf ('overlay' x y) ('connect' x y) == True
-    /// isSubgraphOf ('path' xs)     ('circuit' xs)  == True
-    /// @
-    let isSubgraphOf x y = overlay x y = y
-
-    /// Structural equality on graph expressions.
-    /// Complexity: /O(s)/ time.
-    ///
-    /// @
-    ///     x === x         == True
-    ///     x === x + 'empty' == False
-    /// x + y === x + y     == True
-    /// 1 + 2 === 2 + 1     == False
-    /// x + y === x * y     == False
-    /// @
-    let areEqual g1 g2 =
-        match g1, g2 with
-        | Empty, Empty -> true
-        | Vertex v1, Vertex v2 -> v1 = v2
-        | Overlay (g1, g2), Overlay (g3, g4) -> g1 = g3 && g2 = g4
-        | Connect (g1, g2), Connect (g3, g4) -> g1 = g3 && g2 = g4
-        | _ -> false
-
-    /// Check if a graph is empty. A convenient alias for 'null'.
+    /// | Check if a graph is empty. A convenient alias for 'null'.
     /// Complexity: /O(s)/ time.
     ///
     /// @
@@ -306,12 +277,8 @@ module Graph =
     /// isEmpty ('removeVertex' x $ 'vertex' x) == True
     /// isEmpty ('removeEdge' x y $ 'edge' x y) == False
     /// @
-    let rec isEmpty g =
-        match g with
-        | Empty -> true
-        | Vertex _ -> false
-        | Overlay (g1, g2) -> isEmpty g1 && isEmpty g2
-        | Connect (g1, g2) -> isEmpty g1 && isEmpty g2
+    let isEmpty (x : 'a Graph) : bool =
+        foldg true (fun _ -> false) (&&) (&&) x
 
     /// The /size/ of a graph, i.e. the number of leaves of the expression
     /// including 'empty' leaves.
@@ -325,7 +292,8 @@ module Graph =
     /// size x             >= 1
     /// size x             >= 'vertexCount' x
     /// @
-    let size g = foldg 1 (fun _ -> 1) (+) (+) g
+    let size (x : 'a Graph) : int =
+        foldg 1 (fun _ -> 1) (+) (+) x
 
     /// Check if a graph contains a given vertex. A convenient alias for `elem`.
     /// Complexity: /O(s)/ time.
@@ -333,11 +301,8 @@ module Graph =
     /// @
     /// hasVertex x 'empty'            == False
     /// hasVertex x ('vertex' x)       == True
+    /// hasVertex 1 ('vertex' 2)       == False
     /// hasVertex x . 'removeVertex' x == const False
     /// @
-    let rec hasVertex v g =
-        match g with
-        | Empty -> false
-        | Vertex v' -> v = v'
-        | Overlay (g1, g2) -> hasVertex v g1 || hasVertex v g2
-        | Connect (g1, g2) -> hasVertex v g1 || hasVertex v g2
+    let hasVertex (v : 'a) (g : 'a Graph) : bool =
+        foldg false ((=) v) (||) (||) g
