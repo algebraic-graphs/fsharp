@@ -1,5 +1,7 @@
 namespace Alga.FSharp
 
+open Alga.FSharp.Internal
+
 (*
 Module     : Algebra.Graph
 Copyright  : (c) Andrey Mokhov 2016-2018
@@ -306,3 +308,55 @@ module Graph =
     /// @
     let hasVertex (v : 'a) (g : 'a Graph) : bool =
         foldg false ((=) v) (||) (||) g
+
+    /// Check if a graph contains a given edge.
+    /// Complexity: /O(s)/ time.
+    ///
+    /// @
+    /// hasEdge x y 'empty'            == False
+    /// hasEdge x y ('vertex' z)       == False
+    /// hasEdge x y ('edge' x y)       == True
+    /// hasEdge x y . 'removeEdge' x y == const False
+    /// hasEdge x y                  == 'elem' (x,y) . 'edgeList'
+    /// @
+    let hasEdge (s : 'a) (t : 'a) (g : 'a Graph) : bool =
+
+        let rec hit =
+            function
+            | Empty -> Miss
+            | Vertex x -> if x = s then Tail else Miss
+            | Overlay (x, y) ->
+                match hit x with
+                | Miss -> hit y
+                | Tail -> max Tail (hit y)
+                | Edge -> Edge
+            | Connect (x, y) ->
+                match hit x with
+                | Miss -> hit y
+                | Tail -> if hasVertex t y then Edge else Tail
+                | Edge -> Edge
+
+        hit g = Edge
+
+    /// The set of vertices of a given graph.
+    /// Complexity: /O(s * log(n))/ time and /O(n)/ memory.
+    ///
+    /// @
+    /// vertexSet 'empty'      == Set.'Set.empty'
+    /// vertexSet . 'vertex'   == Set.'Set.singleton'
+    /// vertexSet . 'vertices' == Set.'Set.fromList'
+    /// vertexSet . 'clique'   == Set.'Set.fromList'
+    /// @
+    let vertexSet (g : 'a Graph) : 'a Set =
+        foldg Set.empty Set.singleton Set.union Set.union g
+
+    /// The number of vertices in a graph.
+    /// Complexity: /O(s * log(n))/ time.
+    ///
+    /// @
+    /// vertexCount 'empty'      == 0
+    /// vertexCount ('vertex' x) == 1
+    /// vertexCount            == 'length' . 'vertexList'
+    /// @
+    let vertexCount (g : 'a Graph) : int =
+        g |> vertexSet |> Set.count
