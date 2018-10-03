@@ -1,5 +1,7 @@
 ﻿namespace rec Alga.FSharp.AdjacencyMap.Internal
 
+open Alga.FSharp
+
 (*
 -- Module     : Algebra.Graph.AdjacencyMap.Internal
 -- Copyright  : (c) Andrey Mokhov 2016-2018
@@ -81,7 +83,7 @@ will denote the number of vertices and edges in the graph, respectively.
 /// adjacencyMap ('Algebra.Graph.AdjacencyMap.edge' 1 1) == Map.'Map.singleton' 1 (Set.'Set.singleton' 1)
 /// adjacencyMap ('Algebra.Graph.AdjacencyMap.edge' 1 2) == Map.'Map.fromList' [(1,Set.'Set.singleton' 2), (2,Set.'Set.empty')]
 /// @
-type AdjacencyMap<'a when 'a : comparison> = private AdjacencyMap of Map<'a, 'a Set>
+type AdjacencyMap<'a when 'a : comparison> = AdjacencyMap of Map<'a, 'a Set>
 with
 
     static member (+) (x : 'a AdjacencyMap, y : 'a AdjacencyMap) = AdjacencyMap.overlay x y
@@ -143,14 +145,6 @@ module AdjacencyMap =
     let vertex (x : 'a) : 'a AdjacencyMap =
         Map.empty |> Map.add x Set.empty |> AdjacencyMap
 
-    let unionWith f m1 m2 =
-        Map.fold (fun m k v -> Map.add k (match Map.tryFind k m with None -> v | Some v' -> f v v') m) m1 m2
-
-    let unionsWith f ms =
-        Seq.fold (unionWith f) Map.empty ms
-
-    let keySet m = m |> Map.toSeq |> Seq.map fst |> Set.ofSeq
-
     /// /Overlay/ two graphs. This is a commutative, associative and idempotent
     /// operation with the identity 'empty'.
     /// Complexity: /O((n + m) * log(n))/ time and /O(n + m)/ memory.
@@ -167,7 +161,7 @@ module AdjacencyMap =
     /// @
     let overlay (AdjacencyMap x) (AdjacencyMap y) : 'a AdjacencyMap =
 
-        unionWith Set.union x y |> AdjacencyMap
+        Map.unionWith Set.union x y |> AdjacencyMap
 
     /// /Connect/ two graphs. This is an associative operation with the identity
     /// 'empty', which distributes over 'overlay' and obeys the decomposition axiom.
@@ -189,7 +183,7 @@ module AdjacencyMap =
     /// @
     let connect (AdjacencyMap x) (AdjacencyMap y) : 'a AdjacencyMap =
         let fromSet f s = s |> Seq.map (fun k -> k, f k) |> Map.ofSeq
-        unionsWith Set.union [ x ; y ; fromSet (fun _ -> keySet y) (keySet x) ] |> AdjacencyMap
+        Map.unionsWith Set.union [ x ; y ; fromSet (fun _ -> Map.keysSet y) (Map.keysSet x) ] |> AdjacencyMap
 
     /// Construct a graph from a list of adjacency sets.
     /// Complexity: /O((n + m) * log(n))/ time and /O(n + m)/ memory.
@@ -205,7 +199,7 @@ module AdjacencyMap =
     let fromAdjacencySets (ss : ('a * 'a Set) seq) : 'a AdjacencyMap =
         let vs = ss |> Seq.map snd |> Set.unionMany |> Seq.map (fun k -> k, Set.empty) |> Map.ofSeq
         let es = ss |> Map.ofSeq
-        unionWith Set.union vs es |> AdjacencyMap
+        Map.unionWith Set.union vs es |> AdjacencyMap
 
     /// Check if the internal graph representation is consistent, i.e. that all
     /// edges refer to existing vertices. It should be impossible to create an
@@ -222,7 +216,7 @@ module AdjacencyMap =
     /// consistent ('Algebra.Graph.AdjacencyMap.stars' xs)    == True
     /// @
     let consistent (AdjacencyMap m) : bool =
-        Set.isSubset (referredToVertexSet m) (keySet m)
+        Set.isSubset (referredToVertexSet m) (Map.keysSet m)
 
     /// The set of vertices that are referred to by the edges
     //referredToVertexSet :: Ord a => Map a (Set a) -> Set a

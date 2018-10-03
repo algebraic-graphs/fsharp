@@ -8,7 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Map.fs" />
     <Compile Include="AdjacencyMap/Internal.fs" />
+    <Compile Include="AdjacencyMap.fs" />
     <Compile Include="Internal.fs" />
     <Compile Include="Graph.fs" />
   </ItemGroup>
