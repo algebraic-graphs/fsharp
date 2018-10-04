@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <Compile Include="Map.fs" />
+    <Compile Include="Tree.fs" />
     <Compile Include="AdjacencyMap/Internal.fs" />
     <Compile Include="AdjacencyMap.fs" />
     <Compile Include="Internal.fs" />

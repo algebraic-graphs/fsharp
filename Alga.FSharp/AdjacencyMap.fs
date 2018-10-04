@@ -328,3 +328,173 @@ module AdjacencyMap =
         let y = ys |> Set.ofSeq
         let adjacent v = if Set.contains v x then y else Set.empty
         (Set.union x y) |> Map.fromSet adjacent |> AdjacencyMap
+
+    /// TODO: Optimise.
+    /// The /star/ formed by a centre vertex connected to a list of leaves.
+    /// Complexity: /O((n + m) * log(n))/ time and /O(n + m)/ memory.
+    ///
+    /// @
+    /// star x []    == 'vertex' x
+    /// star x [y]   == 'edge' x y
+    /// star x [y,z] == 'edges' [(x,y), (x,z)]
+    /// star x ys    == 'connect' ('vertex' x) ('vertices' ys)
+    /// @
+    let star (x : 'a) (ys : 'a list) : 'a AdjacencyMap =
+        match ys with
+        | [] -> AdjacencyMap.vertex x
+        | _ -> AdjacencyMap.connect (AdjacencyMap.vertex x) (vertices ys)
+
+    /// The /stars/ formed by overlaying a list of 'star's. An inverse of
+    /// 'adjacencyList'.
+    /// Complexity: /O(L * log(n))/ time, memory and size, where /L/ is the total
+    /// size of the input.
+    ///
+    /// @
+    /// stars []                      == 'empty'
+    /// stars [(x, [])]               == 'vertex' x
+    /// stars [(x, [y])]              == 'edge' x y
+    /// stars [(x, ys)]               == 'star' x ys
+    /// stars                         == 'overlays' . map (uncurry 'star')
+    /// stars . 'adjacencyList'         == id
+    /// 'overlay' (stars xs) (stars ys) == stars (xs ++ ys)
+    /// @
+    let stars (stars : ('a * 'a list) seq) : 'a AdjacencyMap =
+        stars |> Seq.map (fun (v, vs) -> v, vs |> Set.ofList) |> AdjacencyMap.fromAdjacencySets
+
+    /// The /tree graph/ constructed from a given 'Tree' data structure.
+    /// Complexity: /O((n + m) * log(n))/ time and /O(n + m)/ memory.
+    ///
+    /// @
+    /// tree (Node x [])                                         == 'vertex' x
+    /// tree (Node x [Node y [Node z []]])                       == 'path' [x,y,z]
+    /// tree (Node x [Node y [], Node z []])                     == 'star' x [y,z]
+    /// tree (Node 1 [Node 2 [], Node 3 [Node 4 [], Node 5 []]]) == 'edges' [(1,2), (1,3), (3,4), (3,5)]
+    /// @
+    let rec tree (tree : 'a Tree) : 'a AdjacencyMap =
+        match tree.SubForest with
+        | [] -> AdjacencyMap.vertex tree.RootLabel
+        | f ->
+            AdjacencyMap.overlay
+                (f |> List.map (fun t -> t.RootLabel) |> star tree.RootLabel)
+                (f |> List.filter (fun t -> t.SubForest |> List.isEmpty |> not) |> forest)
+
+    // The /forest graph/ constructed from a given 'Forest' data structure.
+    // Complexity: /O((n + m) * log(n))/ time and /O(n + m)/ memory.
+    //
+    // @
+    // forest []                                                  == 'empty'
+    // forest [x]                                                 == 'tree' x
+    // forest [Node 1 [Node 2 [], Node 3 []], Node 4 [Node 5 []]] == 'edges' [(1,2), (1,3), (4,5)]
+    // forest                                                     == 'overlays' . map 'tree'
+    // @
+    and forest (f : 'a Forest) : 'a AdjacencyMap =
+        f |> List.map tree |> overlays
+
+    /// Remove a vertex from a given graph.
+    /// Complexity: /O(n*log(n))/ time.
+    ///
+    /// @
+    /// removeVertex x ('vertex' x)       == 'empty'
+    /// removeVertex 1 ('vertex' 2)       == 'vertex' 2
+    /// removeVertex x ('edge' x x)       == 'empty'
+    /// removeVertex 1 ('edge' 1 2)       == 'vertex' 2
+    /// removeVertex x . removeVertex x == removeVertex x
+    /// @
+    let removeVertex (v : 'a) (AdjacencyMap m) : 'a AdjacencyMap =
+        m |> Map.remove v |> Map.map (fun _ s -> s |> Set.remove v) |> AdjacencyMap
+
+    /// Remove an edge from a given graph.
+    /// Complexity: /O(log(n))/ time.
+    ///
+    /// @
+    /// removeEdge x y ('edge' x y)       == 'vertices' [x,y]
+    /// removeEdge x y . removeEdge x y == removeEdge x y
+    /// removeEdge x y . 'removeVertex' x == 'removeVertex' x
+    /// removeEdge 1 1 (1 * 1 * 2 * 2)  == 1 * 2 * 2
+    /// removeEdge 1 2 (1 * 1 * 2 * 2)  == 1 * 1 + 2 * 2
+    /// @
+    let removeEdge (x : 'a) (y : 'a) (AdjacencyMap m) : 'a AdjacencyMap =
+        m |> Map.adjust (Set.remove y) x |> AdjacencyMap
+
+    /// Transform a graph by applying a function to each of its vertices. This is
+    /// similar to @Functor@'s 'fmap' but can be used with non-fully-parametric
+    /// 'AdjacencyMap'.
+    /// Complexity: /O((n + m) * log(n))/ time.
+    ///
+    /// @
+    /// gmap f 'empty'      == 'empty'
+    /// gmap f ('vertex' x) == 'vertex' (f x)
+    /// gmap f ('edge' x y) == 'edge' (f x) (f y)
+    /// gmap id           == id
+    /// gmap f . gmap g   == gmap (f . g)
+    /// @
+    let gmap (f : 'a -> 'b) (AdjacencyMap m) : 'b AdjacencyMap =
+        m |> Map.mapKeysWith Set.union f |> Map.map (fun _ v -> Set.map f v) |> AdjacencyMap
+
+    /// The function @'replaceVertex' x y@ replaces vertex @x@ with vertex @y@ in a
+    /// given 'AdjacencyMap'. If @y@ already exists, @x@ and @y@ will be merged.
+    /// Complexity: /O((n + m) * log(n))/ time.
+    ///
+    /// @
+    /// replaceVertex x x            == id
+    /// replaceVertex x y ('vertex' x) == 'vertex' y
+    /// replaceVertex x y            == 'mergeVertices' (== x) y
+    /// @
+    let replaceVertex (u : 'a) (v : 'a) (am : 'a AdjacencyMap) : 'a AdjacencyMap =
+        gmap (fun w -> if w = u then v else w) am
+
+    /// Merge vertices satisfying a given predicate into a given vertex.
+    /// Complexity: /O((n + m) * log(n))/ time, assuming that the predicate takes
+    /// /O(1)/ to be evaluated.
+    ///
+    /// @
+    /// mergeVertices (const False) x    == id
+    /// mergeVertices (== x) y           == 'replaceVertex' x y
+    /// mergeVertices even 1 (0 * 2)     == 1 * 1
+    /// mergeVertices odd  1 (3 + 4 * 5) == 4 * 1
+    /// @
+    let mergeVertices (p : 'a -> bool) (v : 'a) (am : 'a AdjacencyMap) : 'a AdjacencyMap =
+        gmap (fun u -> if p u then v else u) am
+
+    /// Transpose a given graph.
+    /// Complexity: /O(m * log(n))/ time, /O(n + m)/ memory.
+    ///
+    /// @
+    /// transpose 'empty'       == 'empty'
+    /// transpose ('vertex' x)  == 'vertex' x
+    /// transpose ('edge' x y)  == 'edge' y x
+    /// transpose . transpose == id
+    /// 'edgeList' . transpose  == 'Data.List.sort' . map 'Data.Tuple.swap' . 'edgeList'
+    /// @
+    let transpose (AdjacencyMap m) : 'a AdjacencyMap =
+        let combine s v es = Map.unionWith Set.union (Map.fromSet (fun _ -> Set.singleton v) es) s
+        let vs = Map.fromSet (fun _ -> Set.empty) (Map.keysSet m)
+        m |> Map.fold combine vs |> AdjacencyMap
+
+    //{-# RULES
+    //"transpose/empty"    transpose empty = empty
+    //"transpose/vertex"   forall x. transpose (vertex x) = vertex x
+    //"transpose/overlay"  forall g1 g2. transpose (overlay g1 g2) = overlay (transpose g1) (transpose g2)
+    //"transpose/connect"  forall g1 g2. transpose (connect g1 g2) = connect (transpose g2) (transpose g1)
+
+    //"transpose/overlays" forall xs. transpose (overlays xs) = overlays (map transpose xs)
+    //"transpose/connects" forall xs. transpose (connects xs) = connects (reverse (map transpose xs))
+
+    //"transpose/vertices" forall xs. transpose (vertices xs) = vertices xs
+    //"transpose/clique"   forall xs. transpose (clique xs)   = clique (reverse xs)
+    // #-}
+
+    /// Construct the /induced subgraph/ of a given graph by removing the
+    /// vertices that do not satisfy a given predicate.
+    /// Complexity: /O(m)/ time, assuming that the predicate takes /O(1)/ to
+    /// be evaluated.
+    ///
+    /// @
+    /// induce (const True ) x      == x
+    /// induce (const False) x      == 'empty'
+    /// induce (/= x)               == 'removeVertex' x
+    /// induce p . induce q         == induce (\\x -> p x && q x)
+    /// 'isSubgraphOf' (induce p x) x == True
+    /// @
+    let induce (p : 'a -> bool) (AdjacencyMap m) : 'a AdjacencyMap =
+        m |> Map.filter (fun k _ -> p k) |> Map.map (fun k v -> v |> Set.filter p) |> AdjacencyMap
