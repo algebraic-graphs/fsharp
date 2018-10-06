@@ -498,3 +498,209 @@ module AdjacencyMap =
     /// @
     let induce (p : 'a -> bool) (AdjacencyMap m) : 'a AdjacencyMap =
         m |> Map.filter (fun k _ -> p k) |> Map.map (fun k v -> v |> Set.filter p) |> AdjacencyMap
+
+    /// Build 'GraphKL' from an 'AdjacencyMap'.
+    /// If @fromAdjacencyMap g == h@ then the following holds:
+    ///
+    /// @
+    /// map ('fromVertexKL' h) ('Data.Graph.vertices' $ 'toGraphKL' h)                               == 'Algebra.Graph.AdjacencyMap.vertexList' g
+    /// map (\\(x, y) -> ('fromVertexKL' h x, 'fromVertexKL' h y)) ('Data.Graph.edges' $ 'toGraphKL' h) == 'Algebra.Graph.AdjacencyMap.edgeList' g
+    /// 'toGraphKL' (fromAdjacencyMap (1 * 2 + 3 * 1))                                == 'array' (0,2) [(0,[1]), (1,[]), (2,[0])]
+    /// 'toGraphKL' (fromAdjacencyMap (1 * 2 + 2 * 1))                                == 'array' (0,1) [(0,[1]), (1,[0])]
+    /// @
+    let toTyped (AdjacencyMap m) : 'a GraphKL =
+        let g, r, t = m |> Map.toSeq |> Seq.sort |> Seq.map (fun (v, us) -> (), v, us |> Set.toSeq) |> Untyped.graphFromEdges
+        {
+            ToGraphKL = g
+            FromVertexKL = fun u -> let (_, v, _) = r u in v
+            ToVertexKL = t
+        }
+
+    /// Compute the /depth-first search/ forest of a graph that corresponds to
+    /// searching from each of the graph vertices in the 'Ord' @a@ order.
+    ///
+    /// @
+    /// dfsForest 'empty'                       == []
+    /// 'forest' (dfsForest $ 'edge' 1 1)         == 'vertex' 1
+    /// 'forest' (dfsForest $ 'edge' 1 2)         == 'edge' 1 2
+    /// 'forest' (dfsForest $ 'edge' 2 1)         == 'vertices' [1,2]
+    /// 'isSubgraphOf' ('forest' $ dfsForest x) x == True
+    /// 'isDfsForestOf' (dfsForest x) x         == True
+    /// dfsForest . 'forest' . dfsForest        == dfsForest
+    /// dfsForest ('vertices' vs)               == map (\\v -> Node v []) ('Data.List.nub' $ 'Data.List.sort' vs)
+    /// 'dfsForestFrom' ('vertexList' x) x        == dfsForest x
+    /// dfsForest $ 3 * (1 + 4) * (1 + 5)     == [ Node { rootLabel = 1
+    ///                                                 , subForest = [ Node { rootLabel = 5
+    ///                                                                      , subForest = [] }]}
+    ///                                          , Node { rootLabel = 3
+    ///                                                 , subForest = [ Node { rootLabel = 4
+    ///                                                                      , subForest = [] }]}]
+    /// @
+    let rec dfsForest (g : 'a AdjacencyMap) : 'a Forest =
+        g |> dfsForestFrom (vertexList g)
+
+    /// Compute the /depth-first search/ forest of a graph, searching from each of
+    /// the given vertices in order. Note that the resulting forest does not
+    /// necessarily span the whole graph, as some vertices may be unreachable.
+    ///
+    /// @
+    /// dfsForestFrom vs 'empty'                           == []
+    /// 'forest' (dfsForestFrom [1]   $ 'edge' 1 1)          == 'vertex' 1
+    /// 'forest' (dfsForestFrom [1]   $ 'edge' 1 2)          == 'edge' 1 2
+    /// 'forest' (dfsForestFrom [2]   $ 'edge' 1 2)          == 'vertex' 2
+    /// 'forest' (dfsForestFrom [3]   $ 'edge' 1 2)          == 'empty'
+    /// 'forest' (dfsForestFrom [2,1] $ 'edge' 1 2)          == 'vertices' [1,2]
+    /// 'isSubgraphOf' ('forest' $ dfsForestFrom vs x) x     == True
+    /// 'isDfsForestOf' (dfsForestFrom ('vertexList' x) x) x == True
+    /// dfsForestFrom ('vertexList' x) x                   == 'dfsForest' x
+    /// dfsForestFrom vs             ('vertices' vs)       == map (\\v -> Node v []) ('Data.List.nub' vs)
+    /// dfsForestFrom []             x                   == []
+    /// dfsForestFrom [1,4] $ 3 * (1 + 4) * (1 + 5)      == [ Node { rootLabel = 1
+    ///                                                            , subForest = [ Node { rootLabel = 5
+    ///                                                                                 , subForest = [] }
+    ///                                                     , Node { rootLabel = 4
+    ///                                                            , subForest = [] }]
+    /// @
+    and dfsForestFrom (vs : 'a seq) (g : 'a AdjacencyMap) : 'a Forest =
+        g |> toTyped |> Typed.dfsForestFrom vs
+
+    /// Compute the list of vertices visited by the /depth-first search/ in a
+    /// graph, when searching from each of the given vertices in order.
+    ///
+    /// @
+    /// dfs vs    $ 'empty'                    == []
+    /// dfs [1]   $ 'edge' 1 1                 == [1]
+    /// dfs [1]   $ 'edge' 1 2                 == [1,2]
+    /// dfs [2]   $ 'edge' 1 2                 == [2]
+    /// dfs [3]   $ 'edge' 1 2                 == []
+    /// dfs [1,2] $ 'edge' 1 2                 == [1,2]
+    /// dfs [2,1] $ 'edge' 1 2                 == [2,1]
+    /// dfs []    $ x                        == []
+    /// dfs [1,4] $ 3 * (1 + 4) * (1 + 5)    == [1,5,4]
+    /// 'isSubgraphOf' ('vertices' $ dfs vs x) x == True
+    /// @
+    let dfs (vs : 'a seq) (am : 'a AdjacencyMap) : 'a seq =
+        am |> dfsForestFrom vs |> Seq.collect Tree.flatten
+
+    // Compute the list of vertices that are /reachable/ from a given source
+    // vertex in a graph. The vertices in the resulting list appear in the
+    // /depth-first order/.
+    //
+    // @
+    // reachable x $ 'empty'                       == []
+    // reachable 1 $ 'vertex' 1                    == [1]
+    // reachable 1 $ 'vertex' 2                    == []
+    // reachable 1 $ 'edge' 1 1                    == [1]
+    // reachable 1 $ 'edge' 1 2                    == [1,2]
+    // reachable 4 $ 'path'    [1..8]              == [4..8]
+    // reachable 4 $ 'circuit' [1..8]              == [4..8] ++ [1..3]
+    // reachable 8 $ 'clique'  [8,7..1]            == [8] ++ [1..7]
+    // 'isSubgraphOf' ('vertices' $ reachable x y) y == True
+    // @
+    let reachable (x : 'a) (am : 'a AdjacencyMap) : 'a seq =
+        dfs (Seq.singleton x) am
+
+    /// Check if a given list of vertices is a correct /topological sort/ of a graph.
+    ///
+    /// @
+    /// isTopSortOf [3,1,2] (1 * 2 + 3 * 1) == True
+    /// isTopSortOf [1,2,3] (1 * 2 + 3 * 1) == False
+    /// isTopSortOf []      (1 * 2 + 3 * 1) == False
+    /// isTopSortOf []      'empty'           == True
+    /// isTopSortOf [x]     ('vertex' x)      == True
+    /// isTopSortOf [x]     ('edge' x x)      == False
+    /// @
+    let isTopSortOf (xs : 'a seq) ((AdjacencyMap m) as am) : bool =
+        let rec go seen =
+            function
+            | [] -> seen = Map.keysSet m
+            | v::vs ->
+                let newSeen = Set.add v seen
+                Set.intersect (postSet v am) newSeen = Set.empty && go newSeen vs
+        xs |> Seq.toList |> go Set.empty
+
+    /// Compute the /topological sort/ of a graph or return @Nothing@ if the graph
+    /// is cyclic.
+    ///
+    /// @
+    /// topSort (1 * 2 + 3 * 1)               == Just [3,1,2]
+    /// topSort (1 * 2 + 2 * 1)               == Nothing
+    /// fmap (flip 'isTopSortOf' x) (topSort x) /= Just False
+    /// 'isJust' . topSort                      == 'isAcyclic'
+    /// @
+    let topSort (m : 'a AdjacencyMap) : 'a seq option =
+        let result = Typed.topSort (toTyped m)
+        if isTopSortOf result m then Some result else None
+
+    /// Check if a given graph is /acyclic/.
+    ///
+    /// @
+    /// isAcyclic (1 * 2 + 3 * 1) == True
+    /// isAcyclic (1 * 2 + 2 * 1) == False
+    /// isAcyclic . 'circuit'       == 'null'
+    /// isAcyclic                 == 'isJust' . 'topSort'
+    /// @
+    let isAcyclic (am : 'a AdjacencyMap) : bool =
+        am |> topSort |> Option.isSome
+
+    /// Compute the /condensation/ of a graph, where each vertex corresponds to a
+    /// /strongly-connected component/ of the original graph.
+    ///
+    /// @
+    /// scc 'empty'               == 'empty'
+    /// scc ('vertex' x)          == 'vertex' (Set.'Set.singleton' x)
+    /// scc ('edge' x y)          == 'edge' (Set.'Set.singleton' x) (Set.'Set.singleton' y)
+    /// scc ('circuit' (1:xs))    == 'edge' (Set.'Set.fromList' (1:xs)) (Set.'Set.fromList' (1:xs))
+    /// scc (3 * 1 * 4 * 1 * 5) == 'edges' [ (Set.'Set.fromList' [1,4], Set.'Set.fromList' [1,4])
+    ///                                  , (Set.'Set.fromList' [1,4], Set.'Set.fromList' [5]  )
+    ///                                  , (Set.'Set.fromList' [3]  , Set.'Set.fromList' [1,4])
+    ///                                  , (Set.'Set.fromList' [3]  , Set.'Set.fromList' [5]  )]
+    /// @
+    let scc (m : 'a AdjacencyMap) : 'a Set AdjacencyMap =
+        let g = toTyped m
+        let expand xs = let s = Set.ofList xs in xs |> Seq.map (fun x -> x, s)
+        let components = g.ToGraphKL |> Untyped.scc |> Seq.collect (Tree.toList >> List.map g.FromVertexKL >> expand) |> Map.ofSeq
+        gmap (fun v -> defaultArg (Map.tryFind v components) Set.empty) m
+
+    /// Check if a given forest is a correct /depth-first search/ forest of a graph.
+    /// The implementation is based on the paper "Depth-First Search and Strong
+    /// Connectivity in Coq" by François Pottier.
+    ///
+    /// @
+    /// isDfsForestOf []                              'empty'            == True
+    /// isDfsForestOf []                              ('vertex' 1)       == False
+    /// isDfsForestOf [Node 1 []]                     ('vertex' 1)       == True
+    /// isDfsForestOf [Node 1 []]                     ('vertex' 2)       == False
+    /// isDfsForestOf [Node 1 [], Node 1 []]          ('vertex' 1)       == False
+    /// isDfsForestOf [Node 1 []]                     ('edge' 1 1)       == True
+    /// isDfsForestOf [Node 1 []]                     ('edge' 1 2)       == False
+    /// isDfsForestOf [Node 1 [], Node 2 []]          ('edge' 1 2)       == False
+    /// isDfsForestOf [Node 2 [], Node 1 []]          ('edge' 1 2)       == True
+    /// isDfsForestOf [Node 1 [Node 2 []]]            ('edge' 1 2)       == True
+    /// isDfsForestOf [Node 1 [], Node 2 []]          ('vertices' [1,2]) == True
+    /// isDfsForestOf [Node 2 [], Node 1 []]          ('vertices' [1,2]) == True
+    /// isDfsForestOf [Node 1 [Node 2 []]]            ('vertices' [1,2]) == False
+    /// isDfsForestOf [Node 1 [Node 2 [Node 3 []]]]   ('path' [1,2,3])   == True
+    /// isDfsForestOf [Node 1 [Node 3 [Node 2 []]]]   ('path' [1,2,3])   == False
+    /// isDfsForestOf [Node 3 [], Node 1 [Node 2 []]] ('path' [1,2,3])   == True
+    /// isDfsForestOf [Node 2 [Node 3 []], Node 1 []] ('path' [1,2,3])   == True
+    /// isDfsForestOf [Node 1 [], Node 2 [Node 3 []]] ('path' [1,2,3])   == False
+    /// @
+    let isDfsForestOf (f : 'a Forest) (am : 'a AdjacencyMap) : bool =
+
+        let rec go seen =
+            function
+            | [] -> Some seen
+            | t::ts ->
+                option {
+                    let root = t.RootLabel
+                    do! Option.guard (not <| Set.contains root seen)
+                    do! Option.guard (t.SubForest |> List.forall (fun subTree -> hasEdge root subTree.RootLabel am))
+                    let! newSeen = go (Set.add root seen) t.SubForest
+                    do! Option.guard (Set.isSubset (postSet root am) newSeen)
+                    return! go newSeen ts
+                }
+
+        match go Set.empty f with
+        | Some seen -> seen = vertexSet am
+        | None -> false

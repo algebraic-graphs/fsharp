@@ -8,8 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="Option.fs" />
     <Compile Include="Map.fs" />
     <Compile Include="Tree.fs" />
+    <Compile Include="Untyped.fs" />
+    <Compile Include="Typed.fs" />
     <Compile Include="AdjacencyMap/Internal.fs" />
     <Compile Include="AdjacencyMap.fs" />
     <Compile Include="Internal.fs" />
