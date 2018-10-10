@@ -1,6 +1,6 @@
 # Alga.FSharp
 
-[![Build Status](https://travis-ci.org/nickcowle/alga-fsharp.svg?branch=master)](https://travis-ci.org/nickcowle/alga-fsharp)
+[![Build Status](https://travis-ci.org/algebraic-graphs/fsharp.svg?branch=master)](https://travis-ci.org/algebraic-graphs/fsharp)
 
 Alga.FSharp is an F# port of the [Algebraic graphs library](https://github.com/snowleopard/alga) by [Andrey Mokhov](https://www.ncl.ac.uk/engineering/staff/profile/andreymokhov.html#background). The library is .NET Standard, so can be built and run on Windows, Linux and macOS alike.
 
